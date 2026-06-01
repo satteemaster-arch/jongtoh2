@@ -19,6 +19,7 @@ app.use('/api/auth',        require('./routes/auth'));
 app.use('/api/restaurants', require('./routes/restaurants'));
 app.use('/api/bookings',    require('./routes/bookings'));
 app.use('/api/settings',    require('./routes/settings'));
+app.use('/api/tables',      require('./routes/tables'));
 
 // Error handler — ไม่ส่ง stack trace ให้ client
 app.use((err, req, res, _next) => {

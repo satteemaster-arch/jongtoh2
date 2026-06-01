@@ -9,13 +9,17 @@ function allBookings(req, res) {
 }
 
 function create(req, res) {
-  const { restaurant_id, zone, date, time_slot, guests, booker_name, phone } = req.body;
-  if (!restaurant_id || !zone || !date || !time_slot || !guests || !booker_name || !phone) {
+  const { restaurant_id, table_id, zone, date, time_slot, guests, booker_name, phone } = req.body;
+  if (!restaurant_id || !date || !time_slot || !guests || !booker_name || !phone) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ' });
+  }
+  if (!table_id && !zone) {
+    return res.status(400).json({ error: 'กรุณาเลือกโต๊ะหรือโซน' });
   }
   try {
     const booking = bookingService.create({
       restaurant_id: Number(restaurant_id),
+      table_id: table_id ? Number(table_id) : null,
       user_id: req.user.id,
       zone, date, time_slot,
       guests: Number(guests),
@@ -23,7 +27,7 @@ function create(req, res) {
     });
     res.status(201).json(booking);
   } catch (err) {
-    const status = err.message.includes('ถูกจองแล้ว') ? 409 : 400;
+    const status = err.message.includes('เต็มแล้ว') || err.message.includes('ถูกจองแล้ว') ? 409 : 400;
     res.status(status).json({ error: err.message });
   }
 }

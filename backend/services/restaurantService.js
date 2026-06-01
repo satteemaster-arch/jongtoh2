@@ -15,9 +15,21 @@ function create({ name, type, img, description, zones = [] }) {
     'INSERT INTO restaurants (name, type, img, description) VALUES (?, ?, ?, ?)'
   ).run(name, type || '', img || '🍴', description || '');
 
-  const insertZone = db.prepare('INSERT INTO zones (restaurant_id, name) VALUES (?, ?)');
+  const insertZone  = db.prepare('INSERT INTO zones (restaurant_id, name, capacity) VALUES (?, ?, ?)');
+  const insertTable = db.prepare('INSERT INTO tables (restaurant_id, zone_name, label, seats, side) VALUES (?, ?, ?, ?, ?)');
   const insertAll = db.transaction(() => {
-    for (const z of zones) insertZone.run(lastInsertRowid, z);
+    zones.forEach((z, i) => {
+      const zoneName = typeof z === 'string' ? z : z.name;
+      const capacity = typeof z === 'string' ? 20 : (z.capacity || 20);
+      insertZone.run(lastInsertRowid, zoneName, capacity);
+
+      // auto สร้างโต๊ะ: ~4 ที่นั่ง/โต๊ะ สูงสุด 6 โต๊ะ
+      const rowLetter  = String.fromCharCode(65 + i);
+      const tableCount = Math.min(Math.max(2, Math.floor(capacity / 4)), 6);
+      for (let j = 1; j <= tableCount; j++) {
+        insertTable.run(lastInsertRowid, zoneName, `${rowLetter}${j}`, 4, 'center');
+      }
+    });
   });
   insertAll();
 
@@ -30,8 +42,8 @@ function remove(id) {
 }
 
 function _attachZones(rest) {
-  const zones = db.prepare('SELECT name FROM zones WHERE restaurant_id = ?').all(rest.id);
-  return { ...rest, zones: zones.map((z) => z.name) };
+  const zones = db.prepare('SELECT name, capacity FROM zones WHERE restaurant_id = ?').all(rest.id);
+  return { ...rest, zones };
 }
 
 module.exports = { getAll, getById, create, remove };

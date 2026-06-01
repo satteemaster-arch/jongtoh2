@@ -20,31 +20,61 @@ function getAllBookings() {
   `).all();
 }
 
-function create({ restaurant_id, user_id, zone, date, time_slot, guests, booker_name, phone }) {
+function create({ restaurant_id, table_id, user_id, zone, date, time_slot, guests, booker_name, phone }) {
   const settings = _getSettings();
-  if (guests > settings.maxGuests) {
-    throw new Error(`จองได้สูงสุด ${settings.maxGuests} คนต่อครั้ง`);
-  }
 
-  // Transaction: ตรวจสอบและจองในครั้งเดียว (ACID)
   const doBooking = db.transaction(() => {
-    const taken = db.prepare(`
-      SELECT id FROM bookings
-      WHERE restaurant_id = ? AND date = ? AND time_slot = ? AND zone = ?
-    `).get(restaurant_id, date, time_slot, zone);
+    if (table_id) {
+      // ── Table-based booking (airline seat style) ──────────────
+      const tableRow = db.prepare('SELECT * FROM tables WHERE id = ?').get(table_id);
+      if (!tableRow) throw new Error('ไม่พบโต๊ะนี้');
+      if (guests > tableRow.seats) throw new Error(`โต๊ะนี้รับได้สูงสุด ${tableRow.seats} คน`);
 
-    if (taken) throw new Error('ช่วงเวลา/โซนนี้ถูกจองแล้ว กรุณาเลือกใหม่');
+      const taken = db.prepare(
+        'SELECT id FROM bookings WHERE table_id = ? AND date = ? AND time_slot = ?'
+      ).get(table_id, date, time_slot);
+      if (taken) throw new Error('โต๊ะนี้ถูกจองแล้ว กรุณาเลือกโต๊ะอื่น');
 
-    const { lastInsertRowid } = db.prepare(`
-      INSERT INTO bookings (restaurant_id, user_id, zone, date, time_slot, guests, booker_name, phone)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(restaurant_id, user_id, zone, date, time_slot, guests, booker_name, phone);
+      const { lastInsertRowid } = db.prepare(`
+        INSERT INTO bookings (restaurant_id, table_id, user_id, zone, date, time_slot, guests, booker_name, phone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(restaurant_id, table_id, user_id, tableRow.zone_name, date, time_slot, guests, booker_name, phone);
 
-    return db.prepare(`
-      SELECT b.*, r.name AS restaurant_name
-      FROM bookings b JOIN restaurants r ON r.id = b.restaurant_id
-      WHERE b.id = ?
-    `).get(lastInsertRowid);
+      return db.prepare(`
+        SELECT b.*, r.name AS restaurant_name
+        FROM bookings b JOIN restaurants r ON r.id = b.restaurant_id
+        WHERE b.id = ?
+      `).get(lastInsertRowid);
+    } else {
+      // ── Zone-based booking (fallback สำหรับร้านที่ไม่มีโต๊ะ) ─
+      if (guests > settings.maxGuests) throw new Error(`จองได้สูงสุด ${settings.maxGuests} คนต่อครั้ง`);
+
+      const zoneRow = db.prepare(
+        'SELECT capacity FROM zones WHERE restaurant_id = ? AND name = ?'
+      ).get(restaurant_id, zone);
+      const capacity = zoneRow ? zoneRow.capacity : 20;
+
+      const { booked } = db.prepare(`
+        SELECT COALESCE(SUM(guests), 0) AS booked
+        FROM bookings
+        WHERE restaurant_id = ? AND date = ? AND time_slot = ? AND zone = ?
+      `).get(restaurant_id, date, time_slot, zone);
+
+      if (booked + guests > capacity) {
+        throw new Error(`โซนนี้เต็มแล้ว (ความจุ ${capacity} คน / จองไปแล้ว ${booked} คน)`);
+      }
+
+      const { lastInsertRowid } = db.prepare(`
+        INSERT INTO bookings (restaurant_id, user_id, zone, date, time_slot, guests, booker_name, phone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(restaurant_id, user_id, zone, date, time_slot, guests, booker_name, phone);
+
+      return db.prepare(`
+        SELECT b.*, r.name AS restaurant_name
+        FROM bookings b JOIN restaurants r ON r.id = b.restaurant_id
+        WHERE b.id = ?
+      `).get(lastInsertRowid);
+    }
   });
 
   return doBooking();

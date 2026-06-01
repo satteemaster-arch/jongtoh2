@@ -29,6 +29,10 @@ const API = {
   createBooking:  (data)       => apiFetch('/api/bookings',          { method: 'POST',   body: JSON.stringify(data) }),
   cancelBooking:  (id)         => apiFetch(`/api/bookings/${id}`,    { method: 'DELETE' }),
 
+  // Tables
+  getTableAvailability: (restaurantId, date, timeSlot) =>
+    apiFetch(`/api/tables/${restaurantId}/availability?date=${date}&time_slot=${encodeURIComponent(timeSlot)}`),
+
   // Settings
   getSettings:    ()           => apiFetch('/api/settings'),
   updateSettings: (data)       => apiFetch('/api/settings',          { method: 'PUT',    body: JSON.stringify(data) }),

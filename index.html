@@ -9,7 +9,7 @@
 <body>
   <!-- แถบนำทางด้านบน (ซ่อนตอนยังไม่ล็อกอิน) -->
   <header id="navbar" class="navbar hidden">
-    <div class="brand">🌙 jongtoh</div>
+    <div class="brand">🍽️ Jongtoh</div>
     <nav class="nav-links">
       <button class="nav-btn" data-view="booking">จองโต๊ะ</button>
       <button class="nav-btn" data-view="myBookings">การจองของฉัน</button>
@@ -70,33 +70,67 @@
         <div id="restaurantGrid" class="rest-grid"></div>
       </div>
 
-      <!-- กล่องจองโต๊ะ (popup) -->
+      <!-- กล่องจองโต๊ะ (3-step modal) -->
       <div id="bookingModal" class="modal hidden">
-        <div class="modal-box">
+        <div class="modal-box modal-wide">
           <button class="modal-close" id="closeBooking">✕</button>
-          <h3 id="bkRestName">จองโต๊ะ</h3>
-          <form id="bookingForm" class="booking-form">
-            <label>วันที่
-              <input type="date" id="bkDate" required />
-            </label>
-            <label>ช่วงเวลา
-              <select id="bkTime" required></select>
-            </label>
-            <label>โซนที่นั่ง
-              <select id="bkZone" required></select>
-            </label>
-            <label>จำนวนคน
-              <input type="number" id="bkGuests" min="1" max="50" value="2" required />
-            </label>
-            <label>ชื่อผู้จอง
-              <input type="text" id="bkName" placeholder="ชื่อ-นามสกุล" required />
-            </label>
-            <label>เบอร์โทร
-              <input type="tel" id="bkPhone" placeholder="0xx-xxx-xxxx" required />
-            </label>
-            <p class="form-msg" id="bookingMsg"></p>
-            <button type="submit" class="btn btn-primary btn-block">ยืนยันการจอง</button>
-          </form>
+
+          <!-- Progress Bar -->
+          <div class="step-bar">
+            <div class="step-node active" id="sn1"><span>1</span><small>วันเวลา</small></div>
+            <div class="step-line"></div>
+            <div class="step-node" id="sn2"><span>2</span><small>เลือกโต๊ะ</small></div>
+            <div class="step-line"></div>
+            <div class="step-node" id="sn3"><span>3</span><small>ยืนยัน</small></div>
+          </div>
+
+          <!-- Step 1: เลือกวันและเวลา -->
+          <div class="bk-step" id="bk-step1">
+            <p class="step-label" style="display:none"></p>
+            <h3 id="bkRestName">จองโต๊ะ</h3>
+            <form id="dateTimeForm" class="booking-form">
+              <label>วันที่
+                <input type="date" id="bkDate" required />
+              </label>
+              <label>ช่วงเวลา
+                <select id="bkTime" required></select>
+              </label>
+              <button type="submit" class="btn btn-primary btn-block">ดูผังโต๊ะ →</button>
+            </form>
+          </div>
+
+          <!-- Step 2: เลือกโต๊ะ -->
+          <div class="bk-step hidden" id="bk-step2">
+            <button class="bk-back" id="backToStep1">← กลับ</button>
+            <p id="bk-step2-info" class="step2-info"></p>
+            <div class="floor-legend">
+              <span class="legend-item"><span class="leg available"></span>ว่าง</span>
+              <span class="legend-item"><span class="leg taken"></span>จองแล้ว</span>
+              <span class="legend-item"><span class="leg selected"></span>เลือกแล้ว</span>
+            </div>
+            <div id="floorPlan" class="floor-plan"></div>
+          </div>
+
+          <!-- Step 3: ยืนยันการจอง -->
+          <div class="bk-step hidden" id="bk-step3">
+            <button class="bk-back" id="backToStep2">← กลับ</button>
+            <h3>ยืนยันการจอง</h3>
+            <div id="selectedTableInfo" class="selected-info"></div>
+            <form id="bookingForm" class="booking-form">
+              <label>จำนวนคน
+                <input type="number" id="bkGuests" min="1" value="2" required />
+              </label>
+              <label>ชื่อผู้จอง
+                <input type="text" id="bkName" placeholder="ชื่อ-นามสกุล" required />
+              </label>
+              <label>เบอร์โทร
+                <input type="tel" id="bkPhone" placeholder="0xx-xxx-xxxx" required />
+              </label>
+              <p class="form-msg" id="bookingMsg"></p>
+              <button type="submit" class="btn btn-primary btn-block">ยืนยันการจอง ✓</button>
+            </form>
+          </div>
+
         </div>
       </div>
     </section>

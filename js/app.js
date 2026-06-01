@@ -19,6 +19,8 @@ function fmtDate(d) {
 }
 
 let currentBookingRestId = null;
+let currentBookingRests  = [];
+let selectedTable        = null;
 
 // ============================================================
 //  Navigation
@@ -129,24 +131,116 @@ async function renderRestaurants() {
   }
 }
 
+function gotoStep(n) {
+  $$('.bk-step').forEach((s) => s.classList.add('hidden'));
+  $('#bk-step' + n).classList.remove('hidden');
+  [1, 2, 3].forEach((i) => {
+    const node = $('#sn' + i);
+    if (!node) return;
+    node.classList.toggle('active',    i === n);
+    node.classList.toggle('completed', i < n);
+  });
+}
+
 async function openBooking(restId, rests) {
   const rest = rests.find((r) => r.id === restId);
   if (!rest) return;
   currentBookingRestId = restId;
+  currentBookingRests  = rests;
+  selectedTable        = null;
 
   const settings = await API.getSettings();
-  $('#bkRestName').textContent = 'จองโต๊ะ: ' + rest.name;
+  $('#bkRestName').textContent = 'จองโต๊ะ — ' + rest.name;
   $('#bkTime').innerHTML = (settings.timeSlots || []).map((t) => `<option value="${t}">${t} น.</option>`).join('');
-  $('#bkZone').innerHTML = (rest.zones || ['ทั่วไป']).map((z) => `<option value="${z}">${z}</option>`).join('');
-  $('#bkGuests').max = settings.maxGuests || 20;
-  $('#bkName').value = Auth.getUser().username;
 
   const today = new Date().toISOString().split('T')[0];
   $('#bkDate').min = today;
   $('#bkDate').value = today;
 
   $('#bookingMsg').textContent = '';
+  gotoStep(1);
   $('#bookingModal').classList.remove('hidden');
+}
+
+async function loadFloorPlan() {
+  const date     = $('#bkDate').value;
+  const timeSlot = $('#bkTime').value;
+  const plan     = $('#floorPlan');
+
+  $('#bk-step2-info').textContent = `📅 ${fmtDate(date)}  ·  ⏰ ${timeSlot} น.`;
+  plan.innerHTML = '<p class="empty">กำลังโหลดผังโต๊ะ...</p>';
+  gotoStep(2);
+
+  try {
+    const tables = await API.getTableAvailability(currentBookingRestId, date, timeSlot);
+    if (!tables.length) {
+      plan.innerHTML = '<p class="empty">ร้านนี้ยังไม่มีผังโต๊ะ</p>';
+      return;
+    }
+
+    // จัดกลุ่มตาม zone_name
+    const byZone = {};
+    tables.forEach((t) => {
+      if (!byZone[t.zone_name]) byZone[t.zone_name] = [];
+      byZone[t.zone_name].push(t);
+    });
+
+    plan.innerHTML = Object.entries(byZone).map(([zone, ts]) => {
+      const avail = ts.filter((t) => !t.is_booked).length;
+      const sorted = [...ts].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+      return `
+        <div class="fp-zone">
+          <div class="fp-zone-header">
+            <span class="fp-zone-name">${zone}</span>
+            <span class="fp-zone-avail ${avail === 0 ? 'full' : ''}">
+              ${avail === 0 ? 'เต็มทุกโต๊ะ' : `ว่าง ${avail} / ${ts.length} โต๊ะ`}
+            </span>
+          </div>
+          <div class="fp-tables">
+            ${sorted.map((t) => `
+              <div class="fp-table ${t.is_booked ? 'taken' : 'available'}"
+                   data-id="${t.id}" data-seats="${t.seats}"
+                   data-label="${t.label}" data-zone="${t.zone_name}">
+                <span class="fp-icon">${t.is_booked ? '🚫' : '🪑'}</span>
+                <span class="fp-label">โต๊ะ ${t.label}</span>
+                <span class="fp-cap">${t.is_booked ? 'จองแล้ว' : t.seats + ' ที่นั่ง'}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    plan.querySelectorAll('.fp-table.available').forEach((el) =>
+      el.addEventListener('click', () => selectTable(el))
+    );
+  } catch {
+    plan.innerHTML = '<p class="empty">โหลดผังโต๊ะไม่สำเร็จ</p>';
+  }
+}
+
+function selectTable(el) {
+  $('#floorPlan').querySelectorAll('.fp-table.selected').forEach((s) => s.classList.remove('selected'));
+  el.classList.add('selected');
+
+  selectedTable = {
+    id:    Number(el.dataset.id),
+    label: el.dataset.label,
+    zone:  el.dataset.zone,
+    seats: Number(el.dataset.seats),
+  };
+
+  $('#selectedTableInfo').innerHTML = `
+    <div class="selected-badge">
+      🪑 โต๊ะ <b>${selectedTable.label}</b> &nbsp;·&nbsp; ${selectedTable.zone}
+      <span class="muted">&nbsp;(รองรับ ${selectedTable.seats} ที่นั่ง)</span>
+    </div>
+  `;
+  $('#bkGuests').max   = selectedTable.seats;
+  $('#bkGuests').value = Math.min(2, selectedTable.seats);
+  $('#bkName').value   = Auth.getUser().username;
+  $('#bookingMsg').textContent = '';
+  gotoStep(3);
 }
 
 function initBooking() {
@@ -154,6 +248,14 @@ function initBooking() {
   $('#bookingModal').addEventListener('click', (e) => {
     if (e.target.id === 'bookingModal') $('#bookingModal').classList.add('hidden');
   });
+
+  $('#dateTimeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await loadFloorPlan();
+  });
+
+  $('#backToStep1').addEventListener('click', () => gotoStep(1));
+  $('#backToStep2').addEventListener('click', () => gotoStep(2));
 
   $('#bookingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -163,15 +265,15 @@ function initBooking() {
     try {
       await API.createBooking({
         restaurant_id: currentBookingRestId,
-        zone:      $('#bkZone').value,
-        date:      $('#bkDate').value,
-        time_slot: $('#bkTime').value,
-        guests:    Number($('#bkGuests').value),
-        booker_name: $('#bkName').value.trim(),
-        phone:     $('#bkPhone').value.trim(),
+        table_id:      selectedTable ? selectedTable.id : null,
+        zone:          selectedTable ? selectedTable.zone : null,
+        date:          $('#bkDate').value,
+        time_slot:     $('#bkTime').value,
+        guests:        Number($('#bkGuests').value),
+        booker_name:   $('#bkName').value.trim(),
+        phone:         $('#bkPhone').value.trim(),
       });
       $('#bookingModal').classList.add('hidden');
-      $('#bookingForm').reset();
       toast('จองโต๊ะสำเร็จ! 🎉', 'success');
       showView('myBookings');
     } catch (err) {
@@ -268,7 +370,7 @@ async function renderAdminRests() {
           <div class="info">
             <b>${r.name}</b> <small>(${r.type || '-'})</small><br/>
             <small>${r.description || ''}</small><br/>
-            <small>โซน: ${(r.zones || []).join(', ') || '-'}</small>
+            <small>โซน: ${(r.zones || []).map((z) => `${z.name || z} (${z.capacity || 20} คน)`).join(', ') || '-'}</small>
           </div>
           <button class="btn btn-danger btn-sm btn-del-rest" data-id="${r.id}">ลบ</button>
         </div>`;
