@@ -23,6 +23,32 @@ let currentBookingRests  = [];
 let selectedTable        = null;
 
 // ============================================================
+//  Restaurant images — map cuisine/keywords to real photos
+// ============================================================
+const U = (id) => `https://images.unsplash.com/photo-${id}?w=600&h=400&fit=crop&q=80`;
+const FOOD_IMAGES = [
+  { kw: ['ไทย', 'thai'],                  url: U('1504674900247-0877df9cc836') },
+  { kw: ['ญี่ปุ่น', 'ซูชิ', 'japan', 'sushi'], url: U('1579871494447-9811cf80d66c') },
+  { kw: ['อิตา', 'พาสต้า', 'italian', 'pasta'], url: U('1551183053-bf91a1d81141') },
+  { kw: ['พิซซ่า', 'pizza'],              url: U('1513104890138-7c749659a591') },
+  { kw: ['เบอร์เกอร์', 'burger', 'ฟาสต์'], url: U('1568901346375-23c9450c58cd') },
+  { kw: ['สเต็ก', 'steak', 'เนื้อ'],       url: U('1546964124-0cce460f38ef') },
+  { kw: ['ทะเล', 'seafood'],              url: U('1559737558-2f5a35f4523b') },
+  { kw: ['เกาหลี', 'korea', 'bbq', 'ปิ้งย่าง'], url: U('1498654896293-37aacf113fd9') },
+  { kw: ['จีน', 'china', 'chinese', 'ติ่มซำ'], url: U('1525755662778-989d0524087e') },
+  { kw: ['กาแฟ', 'คาเฟ่', 'cafe', 'coffee'], url: U('1495474472287-4d71bcdd2085') },
+  { kw: ['ขนม', 'หวาน', 'เบเกอรี', 'dessert', 'bakery'], url: U('1551024601-bec78aea704b') },
+];
+const DEFAULT_FOOD_IMAGE = U('1517248135467-4c7edcad34c4');
+
+function restaurantImage(r) {
+  if (/^https?:\/\//.test(r.img || '')) return r.img;          // already a real URL
+  const hay = `${r.type || ''} ${r.name || ''}`.toLowerCase();
+  const hit = FOOD_IMAGES.find((m) => m.kw.some((k) => hay.includes(k)));
+  return hit ? hit.url : DEFAULT_FOOD_IMAGE;
+}
+
+// ============================================================
 //  Navigation
 // ============================================================
 function showView(name) {
@@ -108,10 +134,28 @@ async function renderRestaurants() {
   grid.innerHTML = '<p class="empty">กำลังโหลด...</p>';
   try {
     const rests = await API.getRestaurants();
-    if (!rests.length) { grid.innerHTML = '<p class="empty">ยังไม่มีร้านอาหาร</p>'; return; }
+    const countEl = $('#restCount');
+    if (!rests.length) {
+      if (countEl) countEl.textContent = '';
+      grid.innerHTML = '<p class="empty">ยังไม่มีร้านอาหาร</p>'; return;
+    }
+    if (countEl) countEl.textContent = `${rests.length} ร้าน`;
     grid.innerHTML = rests.map((r) => {
-      const isImg = /^https?:\/\//.test(r.img || '');
-      const thumb = isImg ? `<img src="${r.img}" alt="${r.name}" />` : (r.img || '🍴');
+      const emoji = /^https?:\/\//.test(r.img || '') ? '🍴' : (r.img || '🍴');
+      const imgUrl = restaurantImage(r);
+      const thumb = `<span class="thumb-emoji">${emoji}</span>
+                     <img src="${imgUrl}" alt="${r.name}" loading="lazy" onerror="this.remove()" />`;
+      const zones = r.zones || [];
+      const seats = zones.reduce((sum, z) => sum + (z.capacity || 0), 0);
+      const zoneChips = zones.slice(0, 3)
+        .map((z) => `<span class="zone-chip">${z.name}</span>`).join('');
+      const meta = zones.length
+        ? `<div class="rest-meta">
+             <span class="rest-meta-item">🪑 ${zones.length} โซน</span>
+             <span class="rest-meta-item">👥 รองรับ ${seats} ที่นั่ง</span>
+           </div>
+           <div class="rest-zones">${zoneChips}</div>`
+        : '';
       return `
         <div class="rest-card" data-id="${r.id}">
           <div class="rest-thumb">${thumb}</div>
@@ -119,7 +163,8 @@ async function renderRestaurants() {
             <span class="rest-tag">${r.type || ''}</span>
             <h3>${r.name}</h3>
             <p>${r.description || ''}</p>
-            <button class="btn btn-primary btn-block btn-book" data-id="${r.id}">จองโต๊ะ</button>
+            ${meta}
+            <button class="btn btn-primary btn-block btn-book" data-id="${r.id}">จองโต๊ะ →</button>
           </div>
         </div>`;
     }).join('');
@@ -498,7 +543,30 @@ async function renderAdminBookings() {
 // ============================================================
 //  Init
 // ============================================================
+// ============================================================
+//  Theme (light / dark)
+// ============================================================
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  const btn = $('#themeToggle');
+  if (btn) {
+    btn.textContent = theme === 'light' ? '☀️' : '🌙';
+    btn.title = theme === 'light' ? 'สลับเป็นโหมดมืด' : 'สลับเป็นโหมดสว่าง';
+  }
+}
+
+function initTheme() {
+  applyTheme(localStorage.getItem('theme') || 'dark');
+  const btn = $('#themeToggle');
+  if (btn) btn.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    applyTheme(cur === 'light' ? 'dark' : 'light');
+  });
+}
+
 function init() {
+  initTheme();
   initAuth();
   initBooking();
   initAdminTabs();

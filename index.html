@@ -3,8 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>jongtoh</title>
+  <title>Jongtoh · ระบบจองโต๊ะ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <script>
+    // ตั้งธีมก่อนเรนเดอร์ เพื่อไม่ให้หน้าจอกระพริบ
+    (function () {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
 </head>
 <body>
   <!-- แถบนำทางด้านบน (ซ่อนตอนยังไม่ล็อกอิน) -->
@@ -66,7 +76,30 @@
     <!-- ============ หน้าจองโต๊ะ ============ -->
     <section id="view-booking" class="view hidden">
       <div class="container">
-        <h2>เลือกร้านอาหารที่ต้องการจอง</h2>
+
+        <!-- Hero banner -->
+        <div class="hero">
+          <div class="hero-content">
+            <span class="hero-badge">✨ จองง่าย ได้โต๊ะที่ใช่</span>
+            <h1 class="hero-title">เลือกร้านโปรด<br/>แล้วเริ่มจองโต๊ะได้เลย</h1>
+            <p class="hero-sub">ดูผังโต๊ะแบบเรียลไทม์ เลือกโซนที่ชอบ ยืนยันการจองในไม่กี่คลิก</p>
+            <div class="hero-features">
+              <span class="hero-feat">📅 เลือกวันเวลาได้เอง</span>
+              <span class="hero-feat">🪑 ดูโต๊ะว่างทันที</span>
+              <span class="hero-feat">⚡ ยืนยันรวดเร็ว</span>
+            </div>
+          </div>
+          <div class="hero-art">
+            <span class="hero-emoji">🍽️</span>
+          </div>
+        </div>
+
+        <!-- Section header -->
+        <div class="section-head">
+          <h2>ร้านอาหารแนะนำ</h2>
+          <span class="section-count" id="restCount"></span>
+        </div>
+
         <div id="restaurantGrid" class="rest-grid"></div>
       </div>
 
@@ -212,6 +245,9 @@
     </section>
 
   </main>
+
+  <button id="themeToggle" class="theme-toggle" type="button"
+          title="สลับโทนสีสว่าง / มืด" aria-label="สลับโทนสีสว่าง / มืด">🌙</button>
 
   <div id="toast" class="toast hidden"></div>
 
