@@ -3,6 +3,14 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// แปลงอักขระพิเศษเป็น HTML entity กันค่า (ชื่อร้าน/ผู้จอง/เบอร์ ฯลฯ) ฉีดสคริปต์ (XSS)
+// ใช้ได้ทั้ง text content และค่าใน attribute ที่ครอบด้วย double-quote
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 function toast(msg, type = '') {
   const t = $('#toast');
   t.textContent = msg;
@@ -21,6 +29,10 @@ function fmtDate(d) {
 let currentBookingRestId = null;
 let currentBookingRests  = [];
 let selectedTable        = null;
+
+// สถานะร้านอาหาร + ตัวกรอง (ค้นหา / ประเภทอาหาร)
+let allRestaurants = [];
+let restFilter     = { q: '', type: 'all' };
 
 // ============================================================
 //  Restaurant images — map cuisine/keywords to real photos
@@ -134,46 +146,102 @@ async function renderRestaurants() {
   grid.innerHTML = '<p class="empty">กำลังโหลด...</p>';
   try {
     const rests = await API.getRestaurants();
-    const countEl = $('#restCount');
+    allRestaurants = rests;
     if (!rests.length) {
-      if (countEl) countEl.textContent = '';
+      $('#restCount').textContent = '';
+      $('#restFilters').innerHTML = '';
+      $('.rest-toolbar')?.classList.add('hidden');
       grid.innerHTML = '<p class="empty">ยังไม่มีร้านอาหาร</p>'; return;
     }
-    if (countEl) countEl.textContent = `${rests.length} ร้าน`;
-    grid.innerHTML = rests.map((r) => {
-      const emoji = /^https?:\/\//.test(r.img || '') ? '🍴' : (r.img || '🍴');
-      const imgUrl = restaurantImage(r);
-      const thumb = `<span class="thumb-emoji">${emoji}</span>
-                     <img src="${imgUrl}" alt="${r.name}" loading="lazy" onerror="this.remove()" />`;
-      const zones = r.zones || [];
-      const seats = zones.reduce((sum, z) => sum + (z.capacity || 0), 0);
-      const zoneChips = zones.slice(0, 3)
-        .map((z) => `<span class="zone-chip">${z.name}</span>`).join('');
-      const meta = zones.length
-        ? `<div class="rest-meta">
-             <span class="rest-meta-item">🪑 ${zones.length} โซน</span>
-             <span class="rest-meta-item">👥 รองรับ ${seats} ที่นั่ง</span>
-           </div>
-           <div class="rest-zones">${zoneChips}</div>`
-        : '';
-      return `
-        <div class="rest-card" data-id="${r.id}">
-          <div class="rest-thumb">${thumb}</div>
-          <div class="rest-body">
-            <span class="rest-tag">${r.type || ''}</span>
-            <h3>${r.name}</h3>
-            <p>${r.description || ''}</p>
-            ${meta}
-            <button class="btn btn-primary btn-block btn-book" data-id="${r.id}">จองโต๊ะ →</button>
-          </div>
-        </div>`;
-    }).join('');
-    $$('.btn-book').forEach((btn) =>
-      btn.addEventListener('click', (e) => { e.stopPropagation(); openBooking(Number(btn.dataset.id), rests); })
-    );
+    $('.rest-toolbar')?.classList.remove('hidden');
+    buildRestFilters(rests);
+    applyRestFilter();
   } catch {
     grid.innerHTML = '<p class="empty">โหลดข้อมูลไม่สำเร็จ</p>';
   }
+}
+
+// สร้างชิปกรองจากประเภทอาหารที่มีจริงในข้อมูล (+ ปุ่ม "ทั้งหมด")
+function buildRestFilters(rests) {
+  const box = $('#restFilters');
+  if (!box) return;
+  const types = [...new Set(rests.map((r) => (r.type || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'th'));
+  // ถ้าประเภทที่เคยเลือกไว้หายไป ให้รีเซ็ตกลับเป็น "ทั้งหมด"
+  if (restFilter.type !== 'all' && !types.includes(restFilter.type)) restFilter.type = 'all';
+
+  const chip = (type, label) =>
+    `<button type="button" class="filter-chip ${restFilter.type === type ? 'active' : ''}"
+             data-type="${esc(type)}" aria-pressed="${restFilter.type === type}">${esc(label)}</button>`;
+
+  box.innerHTML = chip('all', 'ทั้งหมด') + types.map((t) => chip(t, t)).join('');
+  box.querySelectorAll('.filter-chip').forEach((c) =>
+    c.addEventListener('click', () => {
+      restFilter.type = c.dataset.type;
+      box.querySelectorAll('.filter-chip').forEach((x) => {
+        const on = x.dataset.type === restFilter.type;
+        x.classList.toggle('active', on);
+        x.setAttribute('aria-pressed', on);
+      });
+      applyRestFilter();
+    })
+  );
+}
+
+// กรองตามคำค้นหา + ประเภท แล้วเรนเดอร์การ์ด
+function applyRestFilter() {
+  const q = restFilter.q.trim().toLowerCase();
+  const list = allRestaurants.filter((r) => {
+    const matchType = restFilter.type === 'all' || (r.type || '').trim() === restFilter.type;
+    const hay = `${r.name || ''} ${r.type || ''} ${r.description || ''}`.toLowerCase();
+    return matchType && (!q || hay.includes(q));
+  });
+  renderRestaurantGrid(list);
+}
+
+function renderRestaurantGrid(list) {
+  const grid = $('#restaurantGrid');
+  $('#restCount').textContent = `${list.length} ร้าน`;
+  if (!list.length) {
+    grid.innerHTML = '<p class="empty">ไม่พบร้านที่ตรงกับการค้นหา</p>';
+    return;
+  }
+  grid.innerHTML = list.map((r) => {
+    const emoji = /^https?:\/\//.test(r.img || '') ? '🍴' : esc(r.img || '🍴');
+    const imgUrl = restaurantImage(r);
+    const thumb = `<span class="thumb-emoji">${emoji}</span>
+                   <img src="${esc(imgUrl)}" alt="${esc(r.name)}" loading="lazy" onerror="this.remove()" />`;
+    const zones = r.zones || [];
+    const seats = zones.reduce((sum, z) => sum + (z.capacity || 0), 0);
+    const zoneChips = zones.slice(0, 3)
+      .map((z) => `<span class="zone-chip">${esc(z.name)}</span>`).join('');
+    const meta = zones.length
+      ? `<div class="rest-meta">
+           <span class="rest-meta-item">🪑 ${zones.length} โซน</span>
+           <span class="rest-meta-item">👥 รองรับ ${seats} ที่นั่ง</span>
+         </div>
+         <div class="rest-zones">${zoneChips}</div>`
+      : '';
+    return `
+      <div class="rest-card" data-id="${r.id}">
+        <div class="rest-thumb">${thumb}</div>
+        <div class="rest-body">
+          <span class="rest-tag">${esc(r.type || '')}</span>
+          <h3>${esc(r.name)}</h3>
+          <p>${esc(r.description || '')}</p>
+          ${meta}
+          <button class="btn btn-primary btn-block btn-book" data-id="${r.id}">จองโต๊ะ →</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.btn-book').forEach((btn) =>
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openBooking(Number(btn.dataset.id), allRestaurants); })
+  );
+  // คลิกที่การ์ดทั้งใบก็เปิดหน้าจองได้ (ปุ่มด้านในมี stopPropagation กันเปิดซ้ำ)
+  grid.querySelectorAll('.rest-card').forEach((card) =>
+    card.addEventListener('click', () => openBooking(Number(card.dataset.id), allRestaurants))
+  );
 }
 
 function gotoStep(n) {
@@ -236,7 +304,7 @@ async function loadFloorPlan() {
       return `
         <div class="fp-zone">
           <div class="fp-zone-header">
-            <span class="fp-zone-name">${zone}</span>
+            <span class="fp-zone-name">${esc(zone)}</span>
             <span class="fp-zone-avail ${avail === 0 ? 'full' : ''}">
               ${avail === 0 ? 'เต็มทุกโต๊ะ' : `ว่าง ${avail} / ${ts.length} โต๊ะ`}
             </span>
@@ -245,10 +313,10 @@ async function loadFloorPlan() {
             ${sorted.map((t) => `
               <div class="fp-table ${t.is_booked ? 'taken' : 'available'}"
                    data-id="${t.id}" data-seats="${t.seats}"
-                   data-label="${t.label}" data-zone="${t.zone_name}">
+                   data-label="${esc(t.label)}" data-zone="${esc(t.zone_name)}">
                 <span class="fp-icon">${t.is_booked ? '🚫' : '🪑'}</span>
-                <span class="fp-label">โต๊ะ ${t.label}</span>
-                <span class="fp-cap">${t.is_booked ? 'จองแล้ว' : t.seats + ' ที่นั่ง'}</span>
+                <span class="fp-label">โต๊ะ ${esc(t.label)}</span>
+                <span class="fp-cap">${t.is_booked ? 'จองแล้ว' : esc(t.seats) + ' ที่นั่ง'}</span>
               </div>
             `).join('')}
           </div>
@@ -277,8 +345,8 @@ function selectTable(el) {
 
   $('#selectedTableInfo').innerHTML = `
     <div class="selected-badge">
-      🪑 โต๊ะ <b>${selectedTable.label}</b> &nbsp;·&nbsp; ${selectedTable.zone}
-      <span class="muted">&nbsp;(รองรับ ${selectedTable.seats} ที่นั่ง)</span>
+      🪑 โต๊ะ <b>${esc(selectedTable.label)}</b> &nbsp;·&nbsp; ${esc(selectedTable.zone)}
+      <span class="muted">&nbsp;(รองรับ ${esc(selectedTable.seats)} ที่นั่ง)</span>
     </div>
   `;
   $('#bkGuests').max   = selectedTable.seats;
@@ -289,9 +357,21 @@ function selectTable(el) {
 }
 
 function initBooking() {
-  $('#closeBooking').addEventListener('click', () => $('#bookingModal').classList.add('hidden'));
+  const closeModal = () => $('#bookingModal').classList.add('hidden');
+  $('#closeBooking').addEventListener('click', closeModal);
   $('#bookingModal').addEventListener('click', (e) => {
-    if (e.target.id === 'bookingModal') $('#bookingModal').classList.add('hidden');
+    if (e.target.id === 'bookingModal') closeModal();
+  });
+  // กด Esc เพื่อปิดหน้าต่างจอง
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#bookingModal').classList.contains('hidden')) closeModal();
+  });
+
+  // ค้นหาร้านแบบเรียลไทม์
+  const search = $('#restSearch');
+  if (search) search.addEventListener('input', () => {
+    restFilter.q = search.value;
+    applyRestFilter();
   });
 
   $('#dateTimeForm').addEventListener('submit', async (e) => {
@@ -350,16 +430,16 @@ function bookingCard(b, showCancel) {
   return `
     <div class="booking-item">
       <div class="b-main">
-        <h4>${b.restaurant_name || b.restName}</h4>
+        <h4>${esc(b.restaurant_name || b.restName)}</h4>
         <div class="b-detail">
-          <span>📅 ${fmtDate(b.date)}</span>
-          <span>⏰ ${b.time_slot || b.time} น.</span>
-          <span>📍 ${b.zone}</span>
-          <span>👥 ${b.guests} คน</span>
+          <span>📅 ${esc(fmtDate(b.date))}</span>
+          <span>⏰ ${esc(b.time_slot || b.time)} น.</span>
+          <span>📍 ${esc(b.zone)}</span>
+          <span>👥 ${esc(b.guests)} คน</span>
         </div>
         <div class="b-detail" style="margin-top:6px">
-          <span>ผู้จอง: ${b.booker_name || b.name}</span>
-          <span>โทร: ${b.phone}</span>
+          <span>ผู้จอง: ${esc(b.booker_name || b.name)}</span>
+          <span>โทร: ${esc(b.phone)}</span>
         </div>
       </div>
       ${showCancel ? `<button class="btn btn-danger btn-sm btn-cancel" data-id="${b.id}">ยกเลิก</button>` : ''}
@@ -408,14 +488,14 @@ async function renderAdminRests() {
     if (!rests.length) { box.innerHTML = '<p class="empty">ยังไม่มีร้านอาหาร</p>'; return; }
     box.innerHTML = rests.map((r) => {
       const isImg = /^https?:\/\//.test(r.img || '');
-      const icon = isImg ? '🖼️' : (r.img || '🍴');
+      const icon = isImg ? '🖼️' : esc(r.img || '🍴');
       return `
         <div class="admin-rest-row">
           <div class="emoji">${icon}</div>
           <div class="info">
-            <b>${r.name}</b> <small>(${r.type || '-'})</small><br/>
-            <small>${r.description || ''}</small><br/>
-            <small>โซน: ${(r.zones || []).map((z) => `${z.name || z} (${z.capacity || 20} คน)`).join(', ') || '-'}</small>
+            <b>${esc(r.name)}</b> <small>(${esc(r.type || '-')})</small><br/>
+            <small>${esc(r.description || '')}</small><br/>
+            <small>โซน: ${(r.zones || []).map((z) => `${esc(z.name || z)} (${esc(z.capacity || 20)} คน)`).join(', ') || '-'}</small>
           </div>
           <button class="btn btn-danger btn-sm btn-del-rest" data-id="${r.id}">ลบ</button>
         </div>`;
@@ -467,7 +547,7 @@ async function renderSettings() {
 
     const chips = $('#timeChips');
     chips.innerHTML = (s.timeSlots || []).map((t) =>
-      `<span class="chip">${t} น.<button data-time="${t}">✕</button></span>`
+      `<span class="chip">${esc(t)} น.<button type="button" data-time="${esc(t)}" aria-label="ลบช่วงเวลา ${esc(t)}" title="ลบ">✕</button></span>`
     ).join('');
     chips.querySelectorAll('button').forEach((btn) =>
       btn.addEventListener('click', async () => {
@@ -520,16 +600,16 @@ async function renderAdminBookings() {
     box.innerHTML = bookings.map((b) => `
       <div class="booking-item">
         <div class="b-main">
-          <h4>${b.restaurant_name} <small style="color:var(--muted)">— โดย ${b.username}</small></h4>
+          <h4>${esc(b.restaurant_name)} <small style="color:var(--muted)">— โดย ${esc(b.username)}</small></h4>
           <div class="b-detail">
-            <span>📅 ${fmtDate(b.date)}</span>
-            <span>⏰ ${b.time_slot} น.</span>
-            <span>📍 ${b.zone}</span>
-            <span>👥 ${b.guests} คน</span>
+            <span>📅 ${esc(fmtDate(b.date))}</span>
+            <span>⏰ ${esc(b.time_slot)} น.</span>
+            <span>📍 ${esc(b.zone)}</span>
+            <span>👥 ${esc(b.guests)} คน</span>
           </div>
           <div class="b-detail" style="margin-top:6px">
-            <span>ผู้จอง: ${b.booker_name}</span>
-            <span>โทร: ${b.phone}</span>
+            <span>ผู้จอง: ${esc(b.booker_name)}</span>
+            <span>โทร: ${esc(b.phone)}</span>
           </div>
         </div>
         <button class="btn btn-danger btn-sm btn-cancel" data-id="${b.id}">ลบ</button>

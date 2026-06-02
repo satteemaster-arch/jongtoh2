@@ -37,7 +37,7 @@
     <section id="view-login" class="view">
       <div class="login-wrap">
         <div class="login-card">
-          <h1>🌙 jongtoh</h1>
+          <h1>🍽️ Jongtoh</h1>
           <p class="subtitle">ระบบจองโต๊ะสมัยใหม่</p>
 
           <div class="tabs">
@@ -100,13 +100,26 @@
           <span class="section-count" id="restCount"></span>
         </div>
 
+        <!-- แถบค้นหา + กรองประเภทอาหาร -->
+        <div class="rest-toolbar">
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input type="search" id="restSearch" autocomplete="off"
+                   placeholder="ค้นหาร้าน ประเภทอาหาร หรือรายละเอียด"
+                   aria-label="ค้นหาร้านอาหาร" />
+          </div>
+          <div class="rest-filters" id="restFilters" role="group"
+               aria-label="กรองตามประเภทอาหาร"></div>
+        </div>
+
         <div id="restaurantGrid" class="rest-grid"></div>
       </div>
 
       <!-- กล่องจองโต๊ะ (3-step modal) -->
       <div id="bookingModal" class="modal hidden">
         <div class="modal-box modal-wide">
-          <button class="modal-close" id="closeBooking">✕</button>
+          <button class="modal-close" id="closeBooking" type="button"
+                  aria-label="ปิดหน้าต่างจองโต๊ะ" title="ปิด">✕</button>
 
           <!-- Progress Bar -->
           <div class="step-bar">

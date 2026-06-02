@@ -320,6 +320,40 @@ select option { background: var(--option-bg); color: var(--text); }
   background: var(--accent-soft); padding: 3px 12px; border-radius: 99px;
 }
 
+/* ============ Restaurant Toolbar (search + filter) ============ */
+.rest-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  margin-bottom: 22px;
+}
+.search-box { position: relative; flex: 1 1 240px; min-width: 0; }
+.search-box .search-icon {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  font-size: .95rem; opacity: .7; pointer-events: none;
+}
+.search-box input { margin-top: 0; padding-left: 40px; }
+.search-box input::-webkit-search-cancel-button { cursor: pointer; }
+
+.rest-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filter-chip {
+  background: var(--surface); border: 1px solid var(--card-border);
+  color: var(--muted); padding: 8px 16px; border-radius: 99px;
+  cursor: pointer; font-family: inherit; font-size: .85rem; font-weight: 500;
+  white-space: nowrap; transition: background .15s, color .15s, border-color .15s;
+}
+.filter-chip:hover { background: var(--surface-hover); color: var(--text); }
+.filter-chip.active {
+  background: var(--primary); color: #fff; border-color: transparent;
+  box-shadow: 0 2px 12px var(--primary-glow);
+}
+
+/* ============ Focus visible (keyboard navigation) ============ */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-indigo);
+  outline-offset: 2px;
+}
+
 /* ============ Restaurant Grid ============ */
 .rest-grid {
   display: grid;
@@ -591,7 +625,7 @@ select option { background: var(--option-bg); color: var(--text); }
   width: 22px; height: 20px; border-radius: 5px 5px 3px 3px;
   border-bottom: 3px solid rgba(0,0,0,.35);
 }
-.leg.available { background: #8b1a1a; }
+.leg.available { background: #10b981; }
 .leg.taken     { background: #2a2d3a; }
 .leg.selected  { background: #c8a42a; }
 
@@ -653,64 +687,28 @@ select option { background: var(--option-bg); color: var(--text); }
 .fp-cap   { font-size: .7rem; color: var(--muted); }
 
 .fp-table.available {
-  background: rgba(99,102,241,.08);
-  border-color: rgba(99,102,241,.25);
+  background: rgba(16,185,129,.10);
+  border-color: rgba(16,185,129,.30);
   cursor: pointer;
 }
 .fp-table.available:hover {
   transform: translateY(-4px);
-  border-color: var(--primary);
-  box-shadow: 0 8px 24px var(--primary-glow);
-  background: rgba(99,102,241,.15);
+  border-color: var(--success);
+  box-shadow: 0 8px 24px rgba(16,185,129,.30);
+  background: rgba(16,185,129,.18);
 }
 .fp-table.taken {
-  background: rgba(244,63,94,.05);
-  border-color: rgba(244,63,94,.15);
-  opacity: .55; cursor: not-allowed;
+  background: var(--surface);
+  border-color: var(--card-border);
+  opacity: .5; cursor: not-allowed;
 }
 .fp-table.taken .fp-label,
-.fp-table.taken .fp-cap { color: var(--danger); }
+.fp-table.taken .fp-cap { color: var(--muted); }
 .fp-table.selected {
   background: rgba(200,164,42,.15);
   border-color: #c8a42a;
   box-shadow: 0 6px 20px rgba(200,164,42,.3);
   transform: translateY(-2px);
-}
-
-/* ── Seat Icon ── */
-.seat {
-  width: 32px; height: 30px;
-  border-radius: 6px 6px 3px 3px;
-  border-bottom: 4px solid rgba(0,0,0,.4);
-  position: relative; flex-shrink: 0;
-  transition: transform .1s, filter .1s;
-}
-
-.seat.available {
-  background: #8b1a1a;
-  cursor: pointer;
-}
-.seat.available:hover {
-  background: #b52525;
-  transform: scale(1.18) translateY(-2px);
-  filter: brightness(1.25);
-  z-index: 2;
-  border-bottom-color: rgba(0,0,0,.5);
-}
-
-.seat.taken {
-  background: #1e2030;
-  border-bottom-color: rgba(0,0,0,.3);
-  cursor: not-allowed;
-  opacity: .55;
-}
-
-.seat.selected {
-  background: #c8a42a;
-  border-bottom-color: rgba(0,0,0,.4);
-  box-shadow: 0 0 14px rgba(200,164,42,.6);
-  transform: scale(1.1);
-  z-index: 2;
 }
 
 /* Selected table info badge */
