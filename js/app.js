@@ -367,12 +367,18 @@ function initBooking() {
     if (e.key === 'Escape' && !$('#bookingModal').classList.contains('hidden')) closeModal();
   });
 
-  // ค้นหาร้านแบบเรียลไทม์
+  // ค้นหาร้านแบบ debounce 300ms — ป้องกัน filter ทุก keystroke
   const search = $('#restSearch');
-  if (search) search.addEventListener('input', () => {
-    restFilter.q = search.value;
-    applyRestFilter();
-  });
+  if (search) {
+    let debounceTimer;
+    search.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        restFilter.q = search.value;
+        applyRestFilter();
+      }, 300);
+    });
+  }
 
   $('#dateTimeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
