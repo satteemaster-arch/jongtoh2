@@ -1,4 +1,5 @@
 const authService = require('../services/authService');
+const logger      = require('../utils/logger');
 
 function register(req, res) {
   const { username, password } = req.body;
@@ -9,7 +10,8 @@ function register(req, res) {
     const result = authService.register(username.trim(), password);
     res.status(201).json(result);
   } catch (err) {
-    res.status(409).json({ error: err.message });
+    logger.error('Registration error', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
@@ -22,7 +24,8 @@ function login(req, res) {
     const result = authService.login(username.trim(), password);
     res.json(result);
   } catch (err) {
-    res.status(401).json({ error: err.message });
+    logger.error('Login error', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
